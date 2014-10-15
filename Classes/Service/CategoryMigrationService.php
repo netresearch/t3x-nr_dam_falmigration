@@ -70,6 +70,14 @@ class CategoryMigrationService extends AbstractService
             . 'dc.parent_id > 0',
             'Migrating categories child to parent relations'
         );
+        $this->query(
+            "UPDATE sys_file_metadata sfm, sys_category_record_mm scrm "
+            . "SET sfm.categories = 1 WHERE "
+            . "scrm.uid_foreign = sfm.uid AND "
+            . "scrm.tablenames = 'sys_file_metadata' AND "
+            . "scrm.fieldname = 'categories'",
+            'Setting categories fields on sys_file_metadata'
+        );
     }
     
     /**
