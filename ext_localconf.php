@@ -98,5 +98,41 @@ if (TYPO3_MODE == 'BE') {
             'table_local' => "'sys_file'"
         )
     );
+    Netresearch\NrDamFalmigration\Service\CategoryMigrationService::appendMappings(
+        'sys_category',
+        array(
+            '_migrateddamcatuid' => 'dc.uid',
+            'pid' => 'dc.pid',
+            'tstamp' => 'UNIX_TIMESTAMP()',
+            'sorting' => 'dc.sorting',
+            'deleted' => 'dc.deleted',
+            'crdate' => 'dc.crdate',
+            'cruser_id' => 'dc.cruser_id',
+            'hidden' => 'dc.hidden',
+            'title' => 'dc.title',
+            'description' => 'dc.description',
+            'sys_language_uid' => 'dc.sys_language_uid',
+            'l10n_parent' => 'l18n_parent',
+            'l10n_diffsource' => 'l18n_diffsource',
+            't3ver_oid' => 'dc.t3ver_oid',
+            't3ver_id' => 'dc.t3ver_id',
+            't3ver_wsid' => 'dc.t3ver_wsid',
+            't3ver_label' => 'dc.t3ver_label',
+            't3ver_stage' => 'dc.t3ver_stage',
+            't3ver_count' => 'dc.t3ver_count',
+            't3ver_tstamp' => 'dc.t3ver_tstamp'
+        )
+    );
+    Netresearch\NrDamFalmigration\Service\CategoryMigrationService::appendMappings(
+        'sys_category_record_mm',
+        array(
+            'uid_local' => 'sc.uid',
+            'uid_foreign' => 'sf.uid',
+            'sorting' => 'dcm.sorting',
+            'tablenames' => "'sys_file_metadata'",
+            'fieldname' => "'categories'",
+            'sorting_foreign' => 'dcm.sorting_foreign'
+        )
+    );
 }
 ?>

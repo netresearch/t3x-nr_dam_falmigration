@@ -31,7 +31,8 @@ use TYPO3\CMS\Extbase\Mvc\Controller\CommandController;
 class DamMigrationCommandController extends CommandController
 {
     /**
-     * Run all required migration commands
+     * Migrate tx_dam to sys_file and sys_file_metadata and 
+     * tx_dam_mm_ref to sys_file_reference
      * 
      * @param integer $storage Limit import to a storage (which must have a Local
      *                         driver)
@@ -49,6 +50,27 @@ class DamMigrationCommandController extends CommandController
         $service
             ->setResponse($this->response)
             ->setStorageUid($storage)
+            ->setDryrun($dryrun)
+            ->run();
+    }
+    
+    /**
+     * Migrate categories from tx_dam_cat to sys_category and
+     * their relations from tx_dam_mm_cat to sys_category_record_mm
+     * 
+     * @param boolean $dryrun Only show the mysql statements, which would be
+     *                        executed
+     * 
+     * @return void
+     */
+    public function migrateCategoriesCommand($dryrun = false)
+    {
+        /*@var $service \Netresearch\NrDamFalmigration\Service\CategoryMigrationService*/
+        $service = $this->objectManager->get(
+            'Netresearch\\NrDamFalmigration\\Service\\CategoryMigrationService'
+        );
+        $service
+            ->setResponse($this->response)
             ->setDryrun($dryrun)
             ->run();
     }

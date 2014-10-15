@@ -31,90 +31,15 @@ use TYPO3\CMS\Core\Resource\ResourceStorage;
 class FileMigrationService extends AbstractService
 {
     /**
-     * Mapping for each table with each having target columns as key and source
-     * columns or statements as values
-     * @var array
-     */
-    protected $mapping = array();
-    
-    /**
-     * Possible overrides for mapping (use null values to remove mappings)
-     * @var array
-     */
-    protected static $mappingOverrides = array();
-    
-    /**
-     * Register mapping overrides (use null values to remove mappings)
-     * 
-     * @param string $table     Table
-     * @param array  $overrides Overrides
-     * 
-     * @return void
-     */
-    public static function appendMappings($table, array $overrides)
-    {
-        self::$mappingOverrides[] = array($table, $overrides);
-    }
-
-    /**
-     * Initialisation: Apply mapping overrides
-     * 
-     * @return void
-     */
-    protected function init()
-    {
-        parent::init();
-        foreach (self::$mappingOverrides as $info) {
-            list($table, $overrides) = $info;
-            if (!array_key_exists($table, $this->mapping)) {
-                $this->mapping[$table] = array();
-            }
-            foreach ($overrides as $toColumn => $fromColumn) {
-                if ($fromColumn === null) {
-                    unset($this->mapping[$table][$toColumn]);
-                } else {
-                    $this->mapping[$table][$toColumn] = $fromColumn;
-                }
-            }
-        }
-    }
-
-    /**
      * Run the migration
      * 
      * @return void
      */
     public function run()
     {
-        $this->query(
-            'TRUNCATE TABLE sys_file;',
-            'Removing existing FAL file records'
-        );
-        foreach ($this->getStorages() as $storage) {
-            $this->query(
-                $this->getMigrateFilesQuery($storage),
-                "Migrating files for storage '{$storage->getName()}' "
-                . "({$storage->getUid()})"
-            );
-        }
-        
-        $this->query(
-            'TRUNCATE TABLE sys_file_metadata;',
-            'Removing existing FAL metadata'
-        );
-        $this->query(
-            $this->getMigrateMetadataQuery(),
-            'Migrating metadata'
-        );
-        
-        $this->query(
-            'TRUNCATE TABLE sys_file_reference;',
-            'Removing existing FAL references'
-        );
-        $this->query(
-            $this->getMigrateRelationsQuery(),
-            'Migrating references'
-        );
+        $this->migrateFiles();
+        $this->migrateMetadata();
+        $this->migrateRelations();        
         
         if (!$this->dryrun) {
             $this->commitQueries();
@@ -124,57 +49,79 @@ class FileMigrationService extends AbstractService
     }
 
     /**
-     * Get the query to migrate all files suitable for a storage from DAM
+     * Migrate all files by storage from DAM
      * 
-     * @param ResourceStorage $storage Storage
-     * 
-     * @return string
+     * @return void
      */
-    protected function getMigrateFilesQuery(ResourceStorage $storage)
+    protected function migrateFiles()
     {
-        $baseDir = $storage->getPublicUrl($storage->getRootLevelFolder());
-        $baseDirLen = strlen($baseDir);
+        $this->query(
+            'TRUNCATE TABLE sys_file;',
+            'Removing existing FAL file records'
+        );
         
-        return $this->createInsertQuery(
-            'sys_file',
-            'tx_dam',
-            "tx_dam.deleted = 0 AND SUBSTRING(tx_dam.file_path, 1, :baseDirLen) "
-            . "= :baseDir",
-            'tx_dam.uid ASC',
-            array(
-                'baseDir' => $baseDir,
-                'baseDirLen' => $baseDirLen,
-                'storageUid' => $storage->getUid()
-            )
+        foreach ($this->getStorages() as $storage) {
+            $baseDir = $storage->getPublicUrl($storage->getRootLevelFolder());
+            $baseDirLen = strlen($baseDir);
+            $this->query(
+                $this->createInsertQuery(
+                    'sys_file',
+                    'tx_dam',
+                    "tx_dam.deleted = 0 AND "
+                    . "SUBSTRING(tx_dam.file_path, 1, :baseDirLen) = :baseDir",
+                    'tx_dam.uid ASC',
+                    array(
+                        'baseDir' => $baseDir,
+                        'baseDirLen' => $baseDirLen,
+                        'storageUid' => $storage->getUid()
+                    )
+                ),
+                "Migrating files for storage '{$storage->getName()}' "
+                . "({$storage->getUid()})"
+            );
+        }
+    }
+    
+    /**
+     * Migrate all the metadata
+     * 
+     * @return void
+     */
+    protected function migrateMetadata()
+    {
+        $this->query(
+            'TRUNCATE TABLE sys_file_metadata;',
+            'Removing existing FAL metadata'
+        );
+        $this->query(
+            $this->createInsertQuery(
+                'sys_file_metadata',
+                'sys_file, tx_dam',
+                'sys_file._migrateddamuid = tx_dam.uid',
+                'sys_file.uid ASC'
+            ),
+            'Migrating metadata'
         );
     }
     
     /**
-     * Get the query to migrate all the metadata
+     * Insert relations from DAM to FAL
      * 
-     * @return string
+     * @return void
      */
-    protected function getMigrateMetadataQuery()
+    protected function migrateRelations()
     {
-        return $this->createInsertQuery(
-            'sys_file_metadata',
-            'sys_file, tx_dam',
-            'sys_file._migrateddamuid = tx_dam.uid',
-            'sys_file.uid ASC'
+        $this->query(
+            'TRUNCATE TABLE sys_file_reference;',
+            'Removing existing FAL references'
         );
-    }
-    
-    /**
-     * Create the query to insert relations from DAM to FAL
-     * 
-     * @return string
-     */
-    protected function getMigrateRelationsQuery()
-    {
-        return $this->createInsertQuery(
-            'sys_file_reference',
-            'tx_dam_mm_ref mm, sys_file sf',
-            'sf._migrateddamuid = mm.uid_local'
+        $this->query(
+            $this->createInsertQuery(
+                'sys_file_reference',
+                'tx_dam_mm_ref mm, sys_file sf',
+                'sf._migrateddamuid = mm.uid_local'
+            ),
+            'Migrating references'
         );
     }
 }

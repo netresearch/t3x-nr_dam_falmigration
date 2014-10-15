@@ -63,12 +63,53 @@ abstract class AbstractService
     private $queries = array();
 
     /**
-     * Construct - set DB and call init
+     * Mapping for each table with each having target columns as key and source
+     * columns or statements as values
+     * @var array
+     */
+    protected $mapping = array();
+    
+    /**
+     * Possible overrides for mapping (use null values to remove mappings)
+     * @var array
+     */
+    protected static $mappingOverrides = array();
+    
+    /**
+     * Construct - set DB, apply mappings and call init
      */
     public function __construct()
     {
         $this->database = $GLOBALS['TYPO3_DB'];
+        
+        foreach (self::$mappingOverrides as $info) {
+            list($table, $overrides) = $info;
+            if (!array_key_exists($table, $this->mapping)) {
+                $this->mapping[$table] = array();
+            }
+            foreach ($overrides as $toColumn => $fromColumn) {
+                if ($fromColumn === null) {
+                    unset($this->mapping[$table][$toColumn]);
+                } else {
+                    $this->mapping[$table][$toColumn] = $fromColumn;
+                }
+            }
+        }
+        
         $this->init();
+    }
+    
+    /**
+     * Register mapping overrides (use null values to remove mappings)
+     * 
+     * @param string $table    Table
+     * @param array  $mappings Overrides
+     * 
+     * @return void
+     */
+    public static function appendMappings($table, array $mappings)
+    {
+        self::$mappingOverrides[] = array($table, $mappings);
     }
     
     /**
@@ -167,7 +208,7 @@ abstract class AbstractService
      * @return void
      */
     protected function createInsertQuery(
-        $to, $from, $where, $order = null, array $vars = array()
+        $to, $from, $where = '1', $order = null, array $vars = array()
     ) {
         if (!array_key_exists($to, $this->mapping)) {
             throw new Exception\Error("No mapping for table {$to} found");
@@ -283,9 +324,16 @@ abstract class AbstractService
             list($sql, $comment) = $query;
             $this->output($comment);
             if (!$driver->query($sql)) {
-                $driver->rollback();
+                $msg = 'MySQL-Error (Code ' . $driver->errno . '): ' . $driver->error;
+                if (!$driver->rollback()) {
+                    $msg .= "\nCOULD NOT EVEN ROLL BACK PREVIOUS QUERIES";
+                } else {
+                    $msg .= "\nAll previous queries rolled back";
+                }
+                $msg .= "\n--------\nQuery was:\n" . $sql;
                 $driver->autocommit($autocommit);
-                throw new Exception\Error($driver->error);
+                $this->outputLine();
+                throw new Exception\Error($msg);
             }
             $this->outputLine(" ({$driver->affected_rows} rows affected)");
         }
