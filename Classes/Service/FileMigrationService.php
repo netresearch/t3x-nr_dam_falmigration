@@ -86,62 +86,41 @@ class FileMigrationService extends AbstractService
      */
     public function run()
     {
-        $queries = array();
-        $queries[] = 'TRUNCATE TABLE sys_file;';
-        
+        $this->query(
+            'TRUNCATE TABLE sys_file;',
+            'Removing existing FAL file records'
+        );
         foreach ($this->getStorages() as $storage) {
-            $queries[] = $this->getMigrateFilesQuery($storage);
+            $this->query(
+                $this->getMigrateFilesQuery($storage),
+                "Migrating files for storage '{$storage->getName()}' "
+                . "({$storage->getUid()})"
+            );
         }
         
-        $queries[] = 'TRUNCATE TABLE sys_file_metadata;';
-        $queries[] = $this->getMigrateMetadataQuery();
+        $this->query(
+            'TRUNCATE TABLE sys_file_metadata;',
+            'Removing existing FAL metadata'
+        );
+        $this->query(
+            $this->getMigrateMetadataQuery(),
+            'Migrating metadata'
+        );
+        
+        $this->query(
+            'TRUNCATE TABLE sys_file_reference;',
+            'Removing existing FAL references'
+        );
+        $this->query(
+            $this->getMigrateRelationsQuery(),
+            'Migrating references'
+        );
         
         if (!$this->dryrun) {
-            $this->executeQueries($queries);
+            $this->commitQueries();
         } else {
-            foreach ($queries as $query) {
-                $this->outputLine($query);
-            }
+            $this->dumpQueries();
         }
-    }
-    
-    /**
-     * Execute a bunch of queries and roll 'em back when an error occurs
-     * 
-     * @param array $queries Queries
-     * 
-     * @throws Exception\Error
-     * 
-     * @return void
-     */
-    protected function executeQueries(array $queries)
-    {
-        $driver = $this->database->getDatabaseHandle();
-        if (!$driver instanceof \mysqli) {
-            throw new Exception\Error('Driver is not of expected type');
-        }
-        
-        $result = $driver->query("SELECT @@autocommit");
-        $row = $result->fetch_row();
-        $autocommit = $row[0];
-        $result->free();
-        
-        $driver->autocommit(false);
-        $current = 0;
-        $total = count($queries);
-        
-        foreach ($queries as $query) {
-            $current++;
-            $this->outputLine('Executing query ' . $current . ' of ' . $total);
-            if (!$driver->query($query)) {
-                $driver->rollback();
-                $driver->autocommit($autocommit);
-                throw new Exception\Error($driver->error);
-            }
-        }
-        
-        $driver->commit();
-        $driver->autocommit($autocommit);
     }
 
     /**
@@ -184,6 +163,20 @@ class FileMigrationService extends AbstractService
             'sys_file.uid ASC'
         );
     }
+    
+    /**
+     * Create the query to insert relations from DAM to FAL
+     * 
+     * @return string
+     */
+    protected function getMigrateRelationsQuery()
+    {
+        return $this->createInsertQuery(
+            'sys_file_reference',
+            'tx_dam_mm_ref mm, sys_file sf',
+            'sf._migrateddamuid = mm.uid_local'
+        );
+    }
 
     /**
      * Create an insert query out of the given parameters - each of the strings can
@@ -204,7 +197,7 @@ class FileMigrationService extends AbstractService
      * @return void
      */
     protected function createInsertQuery(
-        $to, $from, $where, $order, array $vars = array()
+        $to, $from, $where, $order = null, array $vars = array()
     ) {
         if (!array_key_exists($to, $this->mapping)) {
             throw new Exception\Error("No mapping for table {$to} found");
@@ -220,7 +213,11 @@ class FileMigrationService extends AbstractService
             $sql .= "{$nt} {$fromColumn} {$toColumn},";
         }
         
-        $sql = rtrim($sql, ',') . " \nFROM $from \nWHERE $where \nORDER BY $order;";
+        $sql = rtrim($sql, ',') . " \nFROM $from \nWHERE $where";
+        if ($order) {
+            $sql .= " \nORDER BY $order";
+        }
+        $sql .= ';';
         
         return $vars ? $this->quoteInto($vars, $sql) : $sql;
     }

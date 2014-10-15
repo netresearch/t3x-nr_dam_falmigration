@@ -55,6 +55,12 @@ abstract class AbstractService
      * @var boolean
      */
     protected $dryrun = false;
+    
+    /**
+     * SQL queries to commit later on
+     * @var array
+     */
+    private $queries = array();
 
     /**
      * Construct - set DB and call init
@@ -142,6 +148,72 @@ abstract class AbstractService
         return $storages;
     }
     
+    /**
+     * Collect a query for later execution
+     * 
+     * @param string $sql     SQL
+     * @param string $comment Comment, output before SQL
+     * 
+     * @return void
+     */
+    protected function query($sql, $comment = null)
+    {
+        $this->queries[] = array($sql, $comment);
+    }
+
+    /**
+     * Put the collected queries out
+     * 
+     * @return void
+     */
+    protected function dumpQueries()
+    {
+        foreach ($this->queries as $query) {
+            list($sql, $comment) = $query;
+            if ($comment) {
+                $this->outputLine('/*');
+                $this->outputLine($comment);
+                $this->outputLine('*/');
+            }
+            $this->outputLine($sql . PHP_EOL);
+        }
+    }
+
+    /**
+     * Execute a bunch of queries and roll 'em back when an error occurs
+     * 
+     * @throws Exception\Error
+     * 
+     * @return void
+     */
+    protected function commitQueries()
+    {
+        $driver = $this->database->getDatabaseHandle();
+        if (!$driver instanceof \mysqli) {
+            throw new Exception\Error('Driver is not of expected type');
+        }
+        
+        $result = $driver->query("SELECT @@autocommit");
+        $row = $result->fetch_row();
+        $autocommit = $row[0];
+        $result->free();
+        
+        $driver->autocommit(false);
+        
+        while ($query = array_shift($this->queries)) {
+            list($sql, $comment) = $query;
+            $this->output($comment);
+            if (!$driver->query($sql)) {
+                $driver->rollback();
+                $driver->autocommit($autocommit);
+                throw new Exception\Error($driver->error);
+            }
+            $this->outputLine(" ({$driver->affected_rows} rows affected)");
+        }
+        
+        $driver->commit();
+        $driver->autocommit($autocommit);
+    }    
 
     /**
      * Outputs specified text to the console window

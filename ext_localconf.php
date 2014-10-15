@@ -75,5 +75,28 @@ if (TYPO3_MODE == 'BE') {
             'pages' => 'tx_dam.pages'
         )
     );
+    Netresearch\NrDamFalmigration\Service\FileMigrationService::appendMappings(
+        'sys_file_reference',
+        array(
+            //'pid' => ($pid === NULL) ? 0 : $pid,
+            'tstamp' => 'UNIX_TIMESTAMP()',
+            'crdate' => 'UNIX_TIMESTAMP()',
+            'l10n_diffsource' => "''",
+            'sorting_foreign' => 'mm.sorting_foreign',
+            'uid_local' => 'sf.uid',
+            'uid_foreign' => 'mm.uid_foreign',
+            'tablenames' => 'mm.tablenames',
+            'fieldname' => 
+            "IF("
+            . "mm.tablenames = 'tt_content',"
+                . " CASE mm.ident"
+                    . " WHEN 'tx_damttcontent_files' THEN 'image'"
+                    . " WHEN 'tx_damttcontent_files_upload' THEN 'media'"
+                    . " ELSE mm.ident END,"
+                . "mm.ident"
+            . ")",
+            'table_local' => "'sys_file'"
+        )
+    );
 }
 ?>
