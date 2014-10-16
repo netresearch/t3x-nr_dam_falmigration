@@ -28,7 +28,7 @@ use TYPO3\CMS\Extbase\Mvc\Cli\Response;
  * @license    http://www.netresearch.de Netresearch
  * @link       http://www.netresearch.de
  */
-abstract class AbstractService
+abstract class AbstractMigrationService
 {
     /**
      * @var Response
@@ -126,7 +126,26 @@ abstract class AbstractService
      * 
      * @return void
      */
-    abstract public function run();
+    public function run()
+    {
+        $methods = get_class_methods($this);
+        foreach ($methods as $method) {
+            if (substr($method, 0, 7) == 'migrate') {
+                call_user_func(array($this, $method));
+            }
+        }
+        foreach ($methods as $method) {
+            if (substr($method, 0, 8) == 'sanitize') {
+                call_user_func(array($this, $method));
+            }
+        }
+        
+        if ($this->dryrun) {
+            $this->dumpQueries();
+        } else {
+            $this->commitQueries();
+        }
+    }
 
     /**
      * Set the response (needed to output stuff)
@@ -291,9 +310,7 @@ abstract class AbstractService
         foreach ($this->queries as $query) {
             list($sql, $comment) = $query;
             if ($comment) {
-                $this->outputLine('/*');
-                $this->outputLine($comment);
-                $this->outputLine('*/');
+                $this->outputLine(preg_replace('/^(.*)$/m', '# $1', $comment));
             }
             $this->outputLine($sql . PHP_EOL);
         }
@@ -307,7 +324,7 @@ abstract class AbstractService
      * @return void
      */
     protected function commitQueries()
-    {
+    {        
         $driver = $this->database->getDatabaseHandle();
         if (!$driver instanceof \mysqli) {
             throw new Exception\Error('Driver is not of expected type');

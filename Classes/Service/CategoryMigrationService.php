@@ -28,25 +28,8 @@ use TYPO3\CMS\Core\Resource\ResourceStorage;
  * @license    http://www.netresearch.de Netresearch
  * @link       http://www.netresearch.de
  */
-class CategoryMigrationService extends AbstractService
+class CategoryMigrationService extends AbstractMigrationService
 {
-    /**
-     * Run the migration
-     * 
-     * @return void
-     */
-    public function run()
-    {
-        $this->migrateCategories();
-        $this->migrateCategoryToFileRelations();
-        
-        if (!$this->dryrun) {
-            $this->commitQueries();
-        } else {
-            $this->dumpQueries();
-        }
-    }
-    
     /**
      * Migrate all categories
      * 
@@ -67,16 +50,8 @@ class CategoryMigrationService extends AbstractService
             . 'SET sc1.parent = sc2.uid WHERE '
             . 'sc1._migrateddamcatuid = dc.uid AND '
             . 'sc2._migrateddamcatuid = dc.parent_id AND '
-            . 'dc.parent_id > 0',
+            . 'dc.parent_id > 0;',
             'Migrating categories child to parent relations'
-        );
-        $this->query(
-            "UPDATE sys_file_metadata sfm, sys_category_record_mm scrm "
-            . "SET sfm.categories = 1 WHERE "
-            . "scrm.uid_foreign = sfm.uid AND "
-            . "scrm.tablenames = 'sys_file_metadata' AND "
-            . "scrm.fieldname = 'categories'",
-            'Setting categories fields on sys_file_metadata'
         );
     }
     
@@ -99,6 +74,23 @@ class CategoryMigrationService extends AbstractService
                 . 'sf._migrateddamuid = dcm.uid_local'
             ),
             'Migrating references from categories to files'
+        );
+    }
+    
+    /**
+     * Set the categories field on the metadata table to 1 when file has categories
+     * 
+     * @return void
+     */
+    protected function sanitizeForeignRecords()
+    {
+        $this->query(
+            "UPDATE sys_file_metadata sfm, sys_category_record_mm scrm "
+            . "SET sfm.categories = 1 WHERE "
+            . "scrm.uid_foreign = sfm.uid AND "
+            . "scrm.tablenames = 'sys_file_metadata' AND "
+            . "scrm.fieldname = 'categories';",
+            'Setting categories fields on sys_file_metadata'
         );
     }
 }

@@ -28,26 +28,8 @@ use TYPO3\CMS\Core\Resource\ResourceStorage;
  * @license    http://www.netresearch.de Netresearch
  * @link       http://www.netresearch.de
  */
-class FileMigrationService extends AbstractService
+class FileMigrationService extends AbstractMigrationService
 {
-    /**
-     * Run the migration
-     * 
-     * @return void
-     */
-    public function run()
-    {
-        $this->migrateFiles();
-        $this->migrateMetadata();
-        $this->migrateRelations();        
-        
-        if (!$this->dryrun) {
-            $this->commitQueries();
-        } else {
-            $this->dumpQueries();
-        }
-    }
-
     /**
      * Migrate all files by storage from DAM
      * 
@@ -109,7 +91,7 @@ class FileMigrationService extends AbstractService
      * 
      * @return void
      */
-    protected function migrateRelations()
+    protected function migrateReferences()
     {
         $this->query(
             'TRUNCATE TABLE sys_file_reference;',
@@ -123,6 +105,78 @@ class FileMigrationService extends AbstractService
             ),
             'Migrating references'
         );
+    }
+    
+    /**
+     * Set foreign fields of 'inline' relations to 1, as TYPO3 otherwise won't show
+     * the relations in TCE forms
+     * 
+     * @global type $TCA
+     * 
+     * @return void
+     */
+    public function sanitizeRelatedRecords()
+    {
+        global $TCA;
+        \t3lib_extMgm::loadBaseTca();
+        
+        $tablesAndFields = $this->database->exec_SELECTgetRows(
+            'tablenames, fieldname',
+            'sys_file_reference',
+            '1',
+            'tablenames, fieldname'
+        );
+        $tableFields = array();
+        foreach ($tablesAndFields as $tableAndField) {
+            if (!array_key_exists($tableAndField['tablenames'], $tableFields)) {
+                $tableFields[$tableAndField['tablenames']] = array();
+            }
+            $tableFields[$tableAndField['tablenames']][] = $tableAndField['fieldname'];
+        }
+        $warnings = array();
+        foreach ($tableFields as $table => $fields) {
+            if (array_key_exists($table, $TCA)) {
+                $dbFields = $this->database->admin_get_fields($table);
+                foreach ($fields as $field) {
+                    if (array_key_exists($field, $TCA[$table]['columns'])) {
+                        if (!$TCA[$table]['columns']['config']['type'] != 'inline') {
+                            $warnings[] = "Referenced field not configured as "
+                            . "'inline' field in \$TCA: $table.$field";
+                            continue;
+                        }
+                    } else {
+                        $warnings[] = 'Referenced field not configured in $TCA: '
+                            . "$table.$field";
+                            continue;
+                    }
+                    if (array_key_exists($field, $dbFields)) {
+                        $this->query(
+                            "UPDATE $table tt, sys_file_reference sfr "
+                            . "SET tt.$field = 1 WHERE "
+                            . "sfr.uid_foreign = tt.uid AND "
+                            . "sfr.tablenames = '$table' AND "
+                            . "sfr.fieldname = '$field';",
+                            "Setting relations on local field $table.$field"
+                        );
+                    } else {
+                        $warnings[] = "Local field doesn't exist:  $table.$field";
+                    }
+                }
+            } else {
+                $warnings[] = "Referenced table doesn't exist in \$TCA:  $table";
+            }
+        }
+        if ($warnings) {
+            if ($this->dryrun) {
+                $this->outputLine('/*');
+            }
+            foreach ($warnings as $warning) {
+                $this->outputLine('[WARNING] ' . $warning);
+            }
+            if ($this->dryrun) {
+                $this->outputLine('*/');
+            }
+        }
     }
 }
 ?>
