@@ -82,7 +82,7 @@ class CategoryMigrationService extends AbstractMigrationService
      * 
      * @return void
      */
-    protected function sanitizeForeignRecords()
+    protected function migrateForeignRecords()
     {
         $this->query(
             "UPDATE sys_file_metadata sfm, sys_category_record_mm scrm "

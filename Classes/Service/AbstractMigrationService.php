@@ -95,8 +95,6 @@ abstract class AbstractMigrationService
                 }
             }
         }
-        
-        $this->init();
     }
     
     /**
@@ -128,23 +126,16 @@ abstract class AbstractMigrationService
      */
     public function run()
     {
+        $this->init();
+        
         $methods = get_class_methods($this);
         foreach ($methods as $method) {
             if (substr($method, 0, 7) == 'migrate') {
                 call_user_func(array($this, $method));
             }
         }
-        foreach ($methods as $method) {
-            if (substr($method, 0, 8) == 'sanitize') {
-                call_user_func(array($this, $method));
-            }
-        }
         
-        if ($this->dryrun) {
-            $this->dumpQueries();
-        } else {
-            $this->commitQueries();
-        }
+        $this->commitQueries();
     }
 
     /**
@@ -253,6 +244,38 @@ abstract class AbstractMigrationService
     }
     
     /**
+     * Similar to {@see self::createInsertQuery()} but creates an UPDATE query
+     * 
+     * @param string $table The table to update
+     * @param string $from  Tables to select from
+     * @param string $where WHERE part
+     * @param array  $vars  Variables to bind to the query (will be quoted into the
+     *                      query by replacing their keys prefix with a :)
+     * 
+     * @throws Exception\Error
+     * 
+     * @return type
+     */
+    protected function createUpdateQuery(
+        $table, $from, $where, array $vars = array()
+    ) {
+        if (!array_key_exists($table, $this->mapping)) {
+            throw new Exception\Error("No mapping for table {$table} found");
+        }
+            
+        $mapping = $this->mapping[$table];
+        $sql = "UPDATE {$table}, {$from} SET";
+        $nt = PHP_EOL . '  ';
+        foreach ($mapping as $toColumn => $fromColumn) {
+            $sql .= "{$nt} {$table}.{$toColumn} = {$fromColumn},";
+        }
+        $sql = rtrim($sql, ',') . " \nWHERE $where;";
+        
+        return $vars ? $this->quoteInto($vars, $sql) : $sql;
+    }
+
+
+    /**
      * Quote values into a statement
      * 
      * @param array  $values    Values, where key must be the name
@@ -324,7 +347,11 @@ abstract class AbstractMigrationService
      * @return void
      */
     protected function commitQueries()
-    {        
+    {
+        if ($this->dryrun) {
+            return $this->dumpQueries();
+        }
+        
         $driver = $this->database->getDatabaseHandle();
         if (!$driver instanceof \mysqli) {
             throw new Exception\Error('Driver is not of expected type');
@@ -341,7 +368,7 @@ abstract class AbstractMigrationService
             list($sql, $comment) = $query;
             $this->output($comment);
             if (!$driver->query($sql)) {
-                $msg = 'MySQL-Error (Code ' . $driver->errno . '): ' . $driver->error;
+                $msg = "MySQL-Error (Code {$driver->errno}): {$driver->error}";
                 if (!$driver->rollback()) {
                     $msg .= "\nCOULD NOT EVEN ROLL BACK PREVIOUS QUERIES";
                 } else {
