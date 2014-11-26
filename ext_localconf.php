@@ -23,6 +23,7 @@ if (TYPO3_MODE == 'BE') {
         'sys_file',
         array(
             'tstamp' => 'UNIX_TIMESTAMP()',
+            'last_indexed' => 'UNIX_TIMESTAMP()',
             'storage' => ':storageUid',
             'type' => 
                 'IF(tx_dam.media_type >= 0 AND '
@@ -56,7 +57,7 @@ if (TYPO3_MODE == 'BE') {
             'description' => 'tx_dam.description',
             'width' => 'tx_dam.hpixels',
             'height' => 'tx_dam.vpixels',
-            'visible' => 'tx_dam.hidden',
+            'visible' => 'IF(tx_dam.hidden = 1, 0, 1)',
             'fe_groups' => 'tx_dam.fe_group',
             'download_name' => 'tx_dam.file_dl_name',
             'source' => 'tx_dam.ident',
