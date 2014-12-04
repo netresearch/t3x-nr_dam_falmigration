@@ -16,6 +16,7 @@ declare(encoding = 'UTF-8');
 
 namespace Netresearch\NrDamFalmigration\Controller;
 
+use Netresearch\NrDamFalmigration\Service\AbstractMigrationService;
 use TYPO3\CMS\Extbase\Mvc\Controller\CommandController;
 
 /**
@@ -33,25 +34,23 @@ class DamMigrationCommandController extends CommandController
     /**
      * Migrate tx_dam to sys_file and sys_file_metadata and 
      * tx_dam_mm_ref to sys_file_reference
-     * 
-     * @param integer $storage Limit import to a storage (which must have a Local
-     *                         driver)
-     * @param boolean $dryrun  Only show the mysql statements, which would be
-     *                         executed
+     *
+     * @param integer $storage Limit import to a storage
+     *                         (which must have a Local driver)
+     * @param boolean $dryrun  Only show the mysql statements,
+     *                         which would be executed
+     * @param boolean $count   Only count the records, expected to be migrated
      * 
      * @return void
      */
-    public function migrateFilesCommand($storage = null, $dryrun = false)
-    {
-        /*@var $service \Netresearch\NrDamFalmigration\Service\FileMigrationService*/
+    public function migrateFilesCommand(
+        $storage = null, $dryrun = false, $count = false
+    ) {
         $service = $this->objectManager->get(
             'Netresearch\\NrDamFalmigration\\Service\\FileMigrationService'
         );
-        $service
-            ->setResponse($this->response)
-            ->setStorageUid($storage)
-            ->setDryrun($dryrun)
-            ->run();
+        $service->setStorageUid($storage);
+        $this->runService($service, $dryrun, $count);
     }
     
     /**
@@ -60,19 +59,39 @@ class DamMigrationCommandController extends CommandController
      * 
      * @param boolean $dryrun Only show the mysql statements, which would be
      *                        executed
+     * @param boolean $count  Only count the records, expected to be migrated
      * 
      * @return void
      */
-    public function migrateCategoriesCommand($dryrun = false)
+    public function migrateCategoriesCommand($dryrun = false, $count = false)
     {
-        /*@var $service \Netresearch\NrDamFalmigration\Service\CategoryMigrationService*/
         $service = $this->objectManager->get(
             'Netresearch\\NrDamFalmigration\\Service\\CategoryMigrationService'
         );
-        $service
-            ->setResponse($this->response)
+        $this->runService($service, $dryrun, $count);
+    }
+
+    /**
+     * Execute the service
+     *
+     * @param AbstractMigrationService $service The service to run
+     * @param boolean                  $dryrun  Dryrun it?
+     * @param boolean                  $count   Only count the records?
+     *
+     * @return void
+     */
+    protected function runService(AbstractMigrationService $service, $dryrun, $count)
+    {
+        $res = $service
             ->setDryrun($dryrun)
+            ->setCount($count)
             ->run();
+
+        if ($count) {
+            foreach ($res as $title => $number) {
+                $this->outputLine($title . ': ' . $number);
+            }
+        }
     }
 }
 ?>

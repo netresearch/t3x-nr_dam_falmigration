@@ -16,6 +16,7 @@ declare(encoding = 'UTF-8');
 
 namespace Netresearch\NrDamFalmigration\Service;
 
+use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Extbase\Mvc\Cli\Response;
 
 /**
@@ -31,9 +32,14 @@ use TYPO3\CMS\Extbase\Mvc\Cli\Response;
 abstract class AbstractMigrationService
 {
     /**
-     * @var Response
+     * @var string
      */
-    protected $response;
+    protected $response = '';
+
+    /**
+     * @var bool
+     */
+    protected $flushOutputs = true;
     
     /**
      * @var int|null
@@ -47,7 +53,6 @@ abstract class AbstractMigrationService
     
     /**
      * @var \TYPO3\CMS\Core\Resource\StorageRepository
-     * @inject
      */
     protected $storageRepository;
     
@@ -55,6 +60,11 @@ abstract class AbstractMigrationService
      * @var boolean
      */
     protected $dryrun = false;
+
+    /**
+     * @var bool
+     */
+    protected $count = false;
     
     /**
      * SQL queries to commit later on
@@ -81,6 +91,9 @@ abstract class AbstractMigrationService
     public function __construct()
     {
         $this->database = $GLOBALS['TYPO3_DB'];
+        $this->storageRepository = GeneralUtility::makeInstance(
+            'TYPO3\CMS\Core\Resource\StorageRepository'
+        );
         
         foreach (self::$mappingOverrides as $info) {
             list($table, $overrides) = $info;
@@ -95,6 +108,8 @@ abstract class AbstractMigrationService
                 }
             }
         }
+        
+        $this->init();
     }
     
     /**
@@ -122,33 +137,29 @@ abstract class AbstractMigrationService
     /**
      * Called at last by controller or sth.
      * 
-     * @return void
+     * @return void|array
      */
     public function run()
     {
-        $this->init();
-        
         $methods = get_class_methods($this);
         foreach ($methods as $method) {
             if (substr($method, 0, 7) == 'migrate') {
                 call_user_func(array($this, $method));
             }
         }
-        
-        $this->commitQueries();
-    }
+        foreach ($methods as $method) {
+            if (substr($method, 0, 8) == 'sanitize') {
+                call_user_func(array($this, $method));
+            }
+        }
 
-    /**
-     * Set the response (needed to output stuff)
-     * 
-     * @param \TYPO3\CMS\Extbase\Mvc\Cli\Response $response Response
-     * 
-     * @return $this
-     */
-    public function setResponse(Response $response)
-    {
-        $this->response = $response;
-        return $this;
+        if ($this->count) {
+            return $this->executeCountQueries();
+        } elseif ($this->dryrun) {
+            return $this->dumpQueries();
+        } else {
+            return $this->commitQueries();
+        }
     }
     
     /**
@@ -176,10 +187,28 @@ abstract class AbstractMigrationService
         $this->dryrun = $dryrun;
         return $this;
     }
-    
+
+    /**
+     * Set whether to only count potentially affected records
+     * When set to true, $this->createInsertQuery() and $this->createUpdateQuery()
+     * create COUNT(*) queries, only queries beginning with COUNT( will be executed
+     * and the results returned by $this->run()
+     *
+     * @param boolean $count Whether to only COUNT(*)
+     *
+     * @return $this
+     */
+    public function setCount($count)
+    {
+        $this->count = $count;
+        return $this;
+    }
+
     /**
      * Get the storages - either limited to storageUid or all Local ones
-     * 
+     *
+     * @throws Exception\IllegalDriverType
+     *
      * @return array<\TYPO3\CMS\Core\Resource\ResourceStorage>
      */
     protected function getStorages()
@@ -200,22 +229,25 @@ abstract class AbstractMigrationService
     }
 
     /**
-     * Create an insert query out of the given parameters - each of the strings can
+     * Create an insert query (or a count query if $this->count)
+     * out of the given parameters - each of the strings can
      * contain placeholders, which will be replaced by the given $vars
-     * 
+     *
      * <example>
      * $where = 'storage = :storageUid';
      * $vars = array('storage' => 1);
      * </example>
-     * 
+     *
      * @param string $to    To table
      * @param string $from  From table
      * @param string $where WHERE condition
      * @param string $order ORDER statement (including ASC/DESC)
      * @param array  $vars  Variables to bind to the query (will be quoted into the
      *                      query by replacing their keys prefix with a :)
-     * 
-     * @return void
+     *
+     * @throws Exception\Error
+     *
+     * @return string
      */
     protected function createInsertQuery(
         $to, $from, $where = '1', $order = null, array $vars = array()
@@ -223,58 +255,63 @@ abstract class AbstractMigrationService
         if (!array_key_exists($to, $this->mapping)) {
             throw new Exception\Error("No mapping for table {$to} found");
         }
-            
-        $mapping = $this->mapping[$to];
-        $nt = PHP_EOL . '  ';
-        $sql = "INSERT INTO {$to} ({$nt}";
-        $sql .= implode(",{$nt}", array_keys($mapping));
-        $sql .= "\n) \nSELECT";
-        
-        foreach ($mapping as $toColumn => $fromColumn) {
-            $sql .= "{$nt} {$fromColumn} {$toColumn},";
+
+        if ($this->count) {
+            $sql = "SELECT COUNT(*) FROM {$from} WHERE {$where};";
+        } else {
+            $mapping = $this->mapping[$to];
+            $nt = PHP_EOL . '  ';
+            $sql = "INSERT INTO {$to} ({$nt}";
+            $sql .= implode(",{$nt}", array_keys($mapping));
+            $sql .= "\n) \nSELECT";
+
+            foreach ($mapping as $toColumn => $fromColumn) {
+                $sql .= "{$nt} {$fromColumn} {$toColumn},";
+            }
+
+            $sql = rtrim($sql, ',') . " \nFROM $from \nWHERE $where";
+            if ($order) {
+                $sql .= " \nORDER BY $order";
+            }
+            $sql .= ';';
         }
         
-        $sql = rtrim($sql, ',') . " \nFROM $from \nWHERE $where";
-        if ($order) {
-            $sql .= " \nORDER BY $order";
+        return $vars ? $this->quoteInto($vars, $sql) : $sql;
+    }
+
+    /**
+     * Create an update query (or a count query if $this->count)
+     *
+     * @param string $table The table(s)
+     * @param array  $data  The data (key value pairs or just string values if you
+     *                      want to set sth. to an SQL expression)
+     * @param int    $where The where
+     * @param array  $vars  Vars to bind to
+     *
+     * @return string
+     */
+    protected function createUpdateQuery(
+        $table, array $data, $where = 1, array $vars = array()
+    ) {
+        if ($this->count) {
+            $sql = "SELECT COUNT(*) FROM {$table} WHERE {$where};";
+        } else {
+            $sql = "UPDATE {$table} SET \n";
+            foreach ($data as $key => $value) {
+                if (is_numeric($key)) {
+                    $sql .= $value;
+                } else {
+                    $sql .= "  {$key} = "
+                        . $this->database->fullQuoteStr($value, '');
+                }
+                $sql .= ",\n";
+            }
+            $sql = rtrim($sql, ",\n") . " \nWHERE {$where};";
         }
-        $sql .= ';';
-        
+
         return $vars ? $this->quoteInto($vars, $sql) : $sql;
     }
     
-    /**
-     * Similar to {@see self::createInsertQuery()} but creates an UPDATE query
-     * 
-     * @param string $table The table to update
-     * @param string $from  Tables to select from
-     * @param string $where WHERE part
-     * @param array  $vars  Variables to bind to the query (will be quoted into the
-     *                      query by replacing their keys prefix with a :)
-     * 
-     * @throws Exception\Error
-     * 
-     * @return type
-     */
-    protected function createUpdateQuery(
-        $table, $from, $where, array $vars = array()
-    ) {
-        if (!array_key_exists($table, $this->mapping)) {
-            throw new Exception\Error("No mapping for table {$table} found");
-        }
-            
-        $mapping = $this->mapping[$table];
-        $sql = "UPDATE {$table}, {$from} SET";
-        $nt = PHP_EOL . '  ';
-        foreach ($mapping as $toColumn => $fromColumn) {
-            $sql .= "{$nt} {$table}.{$toColumn} = {$fromColumn},";
-        }
-        $sql = rtrim($sql, ',') . " \nWHERE $where;";
-        
-        return $vars ? $this->quoteInto($vars, $sql) : $sql;
-    }
-
-
     /**
      * Quote values into a statement
      * 
@@ -344,14 +381,10 @@ abstract class AbstractMigrationService
      * 
      * @throws Exception\Error
      * 
-     * @return void
+     * @return array The ran queries
      */
     protected function commitQueries()
-    {
-        if ($this->dryrun) {
-            return $this->dumpQueries();
-        }
-        
+    {        
         $driver = $this->database->getDatabaseHandle();
         if (!$driver instanceof \mysqli) {
             throw new Exception\Error('Driver is not of expected type');
@@ -363,7 +396,8 @@ abstract class AbstractMigrationService
         $result->free();
         
         $driver->autocommit(false);
-        
+
+        $ranQueries = array();
         while ($query = array_shift($this->queries)) {
             list($sql, $comment) = $query;
             $this->output($comment);
@@ -379,12 +413,61 @@ abstract class AbstractMigrationService
                 $this->outputLine();
                 throw new Exception\Error($msg);
             }
+            $ranQueries[] = $sql;
             $this->outputLine(" ({$driver->affected_rows} rows affected)");
         }
         
         $driver->commit();
         $driver->autocommit($autocommit);
-    }    
+
+        return $ranQueries;
+    }
+
+    /**
+     * Execute all COUNT(*) queries and ignore the rest
+     *
+     * @return array
+     */
+    protected function executeCountQueries()
+    {
+        $counts = array();
+        while ($query = array_shift($this->queries)) {
+            list($sql, $comment) = $query;
+            if (strpos($sql, 'SELECT COUNT(') === 0) {
+                $resultSet = $this->database->sql_query($sql);
+                if ($resultSet !== false) {
+                    list($count) = $this->database->sql_fetch_row($resultSet);
+                    $counts[$comment] += (int) $count;
+                    $this->database->sql_free_result($resultSet);
+                }
+            }
+        }
+        return $counts;
+    }
+
+    /**
+     * Set wether to flush outputs immediately or wether to keep them in the response
+     * variable
+     *
+     * @param boolean $flag Flag
+     *
+     * @return $this
+     */
+    public function setFlushOutputs($flag)
+    {
+        $this->flushOutputs = $flag;
+        return $this;
+    }
+
+    /**
+     * Get the response
+     *
+     * @return string
+     */
+    public function getResponse()
+    {
+        return $this->response;
+    }
 
     /**
      * Outputs specified text to the console window
@@ -392,20 +475,20 @@ abstract class AbstractMigrationService
      * 
      * @param string $text      Text to output
      * @param array  $arguments Optional arguments to use for sprintf
-     * @param bool   $flush     Whether to immediately flush the output
      *
      * @see http://www.php.net/sprintf
      * 
      * @return void
      */
-    protected function output($text, array $arguments = array(), $flush = true)
+    protected function output($text, array $arguments = array())
     {
         if ($arguments !== array()) {
             $text = vsprintf($text, $arguments);
         }
-        $this->response->appendContent($text);
-        if ($flush) {
-            $this->response->send();
+        if ($this->flushOutputs) {
+            echo $text;
+        } else {
+            $this->response .= $text;
         }
     }
 
@@ -414,44 +497,12 @@ abstract class AbstractMigrationService
      *
      * @param string $text      Text to output
      * @param array  $arguments Optional arguments to use for sprintf
-     * @param bool   $flush     Whether to immediately flush the output
      * 
      * @return string
      */
-    protected function outputLine(
-        $text = '', array $arguments = array(), $flush = true
-    ) {
+    protected function outputLine($text = '', array $arguments = array())
+    {
         return $this->output($text . PHP_EOL, $arguments);
-    }
-
-    /**
-     * Exits the CLI through the dispatcher
-     * An exit status code can be specified @see http://www.php.net/exit
-     *
-     * @param integer $exitCode Exit code to return on exit
-     * 
-     * @throws \TYPO3\CMS\Extbase\Mvc\Exception\StopActionException
-     * 
-     * @return void
-     */
-    protected function quit($exitCode = 0)
-    {
-        $this->response->setExitCode($exitCode);
-        throw new \TYPO3\CMS\Extbase\Mvc\Exception\StopActionException();
-    }
-
-    /**
-     * Sends the response and exits the CLI without any further code execution
-     * Should be used for commands that flush code caches.
-     *
-     * @param integer $exitCode Exit code to return on exit
-     * 
-     * @return void
-     */
-    protected function sendAndExit($exitCode = 0)
-    {
-        $this->response->send();
-        die($exitCode);
     }
 }
 ?>

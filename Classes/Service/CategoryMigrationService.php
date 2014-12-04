@@ -38,19 +38,22 @@ class CategoryMigrationService extends AbstractMigrationService
     protected function migrateCategories()
     {
         $this->query(
-            "DELETE FROM sys_category WHERE _migrateddamcatuid != '';",
-            'Removing already migrated category records'
-        );
-        $this->query(
-            $this->createInsertQuery('sys_category', 'tx_dam_cat dc'),
+            $this->createInsertQuery(
+                'sys_category',
+                'tx_dam_cat dc LEFT JOIN sys_category sc2 '
+                . 'ON (dc.uid = sc2._migrateddamcatuid)',
+                'sc2.uid IS NULL'
+            ),
             'Migrating categories'
         );
         $this->query(
-            'UPDATE sys_category sc1, sys_category sc2, tx_dam_cat dc '
-            . 'SET sc1.parent = sc2.uid WHERE '
-            . 'sc1._migrateddamcatuid = dc.uid AND '
-            . 'sc2._migrateddamcatuid = dc.parent_id AND '
-            . 'dc.parent_id > 0;',
+            $this->createUpdateQuery(
+                'sys_category sc1, sys_category sc2, tx_dam_cat dc',
+                array('sc1.parent = sc2.uid'),
+                'sc1._migrateddamcatuid = dc.uid AND '
+                . 'sc2._migrateddamcatuid = dc.parent_id AND '
+                . 'dc.parent_id > 0'
+            ),
             'Migrating categories child to parent relations'
         );
     }
@@ -63,15 +66,17 @@ class CategoryMigrationService extends AbstractMigrationService
     protected function migrateCategoryToFileRelations()
     {
         $this->query(
-            "DELETE FROM sys_category_record_mm WHERE tablenames = 'sys_file';",
-            'Removing references from categories to files'
-        );
-        $this->query(
             $this->createInsertQuery(
                 'sys_category_record_mm',
-                'tx_dam_mm_cat dcm, sys_category sc, sys_file sf',
+                'tx_dam_mm_cat dcm, sys_category sc, sys_file sf, '
+                . 'sys_file_metadata sfm LEFT JOIN sys_category_record_mm scr2 ON ('
+                . 'scr2.fieldname = \'categories\' AND '
+                . 'scr2.tablenames = \'sys_file_metadata\' AND '
+                . 'sfm.uid = scr2.uid_foreign)',
                 'sc._migrateddamcatuid = dcm.uid_foreign AND '
-                . 'sf._migrateddamuid = dcm.uid_local'
+                . 'sf._migrateddamuid = dcm.uid_local AND '
+                . 'sfm.file = sf.uid AND '
+                . 'scr2.uid_local IS NULL'
             ),
             'Migrating references from categories to files'
         );
@@ -82,14 +87,17 @@ class CategoryMigrationService extends AbstractMigrationService
      * 
      * @return void
      */
-    protected function migrateForeignRecords()
+    protected function sanitizeForeignRecords()
     {
         $this->query(
-            "UPDATE sys_file_metadata sfm, sys_category_record_mm scrm "
-            . "SET sfm.categories = 1 WHERE "
-            . "scrm.uid_foreign = sfm.uid AND "
-            . "scrm.tablenames = 'sys_file_metadata' AND "
-            . "scrm.fieldname = 'categories';",
+            $this->createUpdateQuery(
+                'sys_file_metadata sfm, sys_category_record_mm scrm',
+                array('sfm.categories' => 1),
+                "sfm.categories != 1 AND "
+                . "scrm.uid_foreign = sfm.uid AND "
+                . "scrm.tablenames = 'sys_file_metadata' AND "
+                . "scrm.fieldname = 'categories'"
+            ),
             'Setting categories fields on sys_file_metadata'
         );
     }

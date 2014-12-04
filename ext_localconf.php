@@ -16,9 +16,15 @@ if (!defined('TYPO3_MODE')) {
 }
 
 if (TYPO3_MODE == 'BE') {
-    $GLOBALS['TYPO3_CONF_VARS']['SC_OPTIONS']['extbase']['commandControllers'][]
+    $scOptions = &$GLOBALS['TYPO3_CONF_VARS']['SC_OPTIONS'];
+    $scOptions['extbase']['commandControllers'][]
         = 'Netresearch\\NrDamFalmigration\Controller\DamMigrationCommandController';
-    
+
+    $scOptions['ext/install']['update']['tx_nrdamfalmigration_files']
+        = 'Netresearch\\NrDamFalmigration\\Updates\\MigrateDamFilesUpdate';
+    $scOptions['ext/install']['update']['tx_nrdamfalmigration_categories']
+        = 'Netresearch\\NrDamFalmigration\\Updates\\MigrateDamCategoriesUpdate';
+
     Netresearch\NrDamFalmigration\Service\FileMigrationService::appendMappings(
         'sys_file',
         array(
@@ -128,7 +134,7 @@ if (TYPO3_MODE == 'BE') {
         'sys_category_record_mm',
         array(
             'uid_local' => 'sc.uid',
-            'uid_foreign' => 'sf.uid',
+            'uid_foreign' => 'sfm.uid',
             'sorting' => 'dcm.sorting',
             'tablenames' => "'sys_file_metadata'",
             'fieldname' => "'categories'",
