@@ -38,8 +38,8 @@ if (TYPO3_MODE == 'BE') {
                 '@filepath := CONCAT(@folderpath := SUBSTRING(tx_dam.file_path, '
                 . ':baseDirLen, CHAR_LENGTH(tx_dam.file_path) - :baseDirLen), '
                 . '\'/\', tx_dam.file_name)',
-            'identifier_hash' => 'SHA1(@filepath) as',
-            'folder_hash' => 'SHA1(@folderpath) as',
+            'identifier_hash' => 'SHA1(@filepath)',
+            'folder_hash' => 'SHA1(@folderpath)',
             'extension' => 'tx_dam.file_type',
             'mime_type' => 
                 'CONCAT(tx_dam.file_mime_type, \'/\', tx_dam.file_mime_subtype)',
