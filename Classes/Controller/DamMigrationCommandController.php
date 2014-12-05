@@ -32,6 +32,24 @@ use TYPO3\CMS\Extbase\Mvc\Controller\CommandController;
 class DamMigrationCommandController extends CommandController
 {
     /**
+     * Shortcut to run migratefiles and migratecategories at once
+     *
+     * @param integer $storage Limit import to a storage
+     *                         (which must have a Local driver)
+     * @param boolean $dryrun  Only show the mysql statements,
+     *                         which would be executed
+     * @param boolean $count   Only count the records, expected to be migrated
+     *
+     * @return void
+     */
+    public function migrateCommand(
+        $storage = null, $dryrun = false, $count = false
+    ) {
+        $this->migrateFilesCommand($storage, $dryrun, $count);
+        $this->migrateCategoriesCommand($dryrun, $count);
+    }
+
+    /**
      * Migrate tx_dam to sys_file and sys_file_metadata and 
      * tx_dam_mm_ref to sys_file_reference
      *
