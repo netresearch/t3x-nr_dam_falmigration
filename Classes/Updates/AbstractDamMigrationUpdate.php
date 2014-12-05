@@ -67,6 +67,10 @@ abstract class AbstractDamMigrationUpdate extends AbstractUpdate
      */
     public function checkForUpdate(&$description)
     {
+        if ($this->isWizardDone()) {
+            return false;
+        }
+
         $service = $this->getService();
         $service->setCount(true);
 
@@ -135,6 +139,8 @@ abstract class AbstractDamMigrationUpdate extends AbstractUpdate
         }
 
         $customMessages .= $service->getResponse();
+
+        $this->markWizardAsDone(1);
 
         return true;
     }
