@@ -17,7 +17,6 @@ declare(encoding = 'UTF-8');
 namespace Netresearch\NrDamFalmigration\Service;
 
 use TYPO3\CMS\Core\Utility\GeneralUtility;
-use TYPO3\CMS\Extbase\Mvc\Cli\Response;
 
 /**
  * Abstract service class with basic setters and out put methods
@@ -31,6 +30,11 @@ use TYPO3\CMS\Extbase\Mvc\Cli\Response;
  */
 abstract class AbstractMigrationService
 {
+    const PRE_MIGRATE_SIGNAL = 'preMigrate';
+    const POST_MIGRATE_SIGNAL = 'postMigrate';
+    const CREATE_INSERT_QUERY_SIGNAL = 'createInsertQuery';
+    const CREATE_UPDATE_QUERY_SIGNAL = 'createUpdateQuery';
+    
     /**
      * @var string
      */
@@ -84,6 +88,11 @@ abstract class AbstractMigrationService
      * @var array
      */
     protected static $mappingOverrides = array();
+
+    /**
+     * @var \TYPO3\CMS\Extbase\SignalSlot\Dispatcher
+     */
+    protected $singalSlotDispatcher;
     
     /**
      * Construct - set DB, apply mappings and call init
@@ -94,6 +103,10 @@ abstract class AbstractMigrationService
         $this->storageRepository = GeneralUtility::makeInstance(
             'TYPO3\CMS\Core\Resource\StorageRepository'
         );
+
+        $this->singalSlotDispatcher = GeneralUtility::makeInstance(
+            'TYPO3\\CMS\\Extbase\\Object\\ObjectManager'
+        )->get('TYPO3\\CMS\\Extbase\\SignalSlot\\Dispatcher');
         
         foreach (self::$mappingOverrides as $info) {
             list($table, $overrides) = $info;
@@ -135,12 +148,29 @@ abstract class AbstractMigrationService
     }
 
     /**
+     * Dispatch a signal
+     *
+     * @param string $signal The signal name
+     * @param mixed  $args   Additional args to pass to slot
+     *
+     * @return void
+     */
+    protected function emitSignal($signal, array $args = array())
+    {
+        return $this->singalSlotDispatcher->dispatch(
+            __CLASS__, $signal, array($this, $args)
+        );
+    }
+
+    /**
      * Called at last by controller or sth.
      * 
      * @return void|array
      */
     public function run()
     {
+        $this->emitSignal(self::PRE_MIGRATE_SIGNAL);
+
         $methods = get_class_methods($this);
         foreach ($methods as $method) {
             if (substr($method, 0, 7) == 'migrate') {
@@ -154,12 +184,17 @@ abstract class AbstractMigrationService
         }
 
         if ($this->count) {
-            return $this->executeCountQueries();
+            $res = $this->executeCountQueries();
         } elseif ($this->dryrun) {
-            return $this->dumpQueries();
+            $res = $this->dumpQueries();
         } else {
-            return $this->commitQueries();
+            $res = $this->commitQueries();
         }
+
+        $args = array(&$res);
+        $this->emitSignal(self::POST_MIGRATE_SIGNAL, $args);
+
+        return $res;
     }
     
     /**
@@ -189,6 +224,16 @@ abstract class AbstractMigrationService
     }
 
     /**
+     * isDryrun
+     *
+     * @return boolean
+     */
+    public function isDryrun()
+    {
+        return $this->dryrun;
+    }
+
+    /**
      * Set whether to only count potentially affected records
      * When set to true, $this->createInsertQuery() and $this->createUpdateQuery()
      * create COUNT(*) queries, only queries beginning with COUNT( will be executed
@@ -202,6 +247,16 @@ abstract class AbstractMigrationService
     {
         $this->count = $count;
         return $this;
+    }
+
+    /**
+     * isCount
+     *
+     * @return boolean
+     */
+    public function isCount()
+    {
+        return $this->count;
     }
 
     /**
@@ -252,6 +307,8 @@ abstract class AbstractMigrationService
     protected function createInsertQuery(
         $to, $from, $where = '1', $order = null, array $vars = array()
     ) {
+        $this->emitSignal(self::CREATE_INSERT_QUERY_SIGNAL, array('vars' => &$vars));
+
         if (!array_key_exists($to, $this->mapping)) {
             throw new Exception\Error("No mapping for table {$to} found");
         }
@@ -276,7 +333,7 @@ abstract class AbstractMigrationService
             $sql .= ';';
         }
         
-        return $vars ? $this->quoteInto($vars, $sql) : $sql;
+        return $this->quoteInto($vars, $sql);
     }
 
     /**
@@ -293,6 +350,9 @@ abstract class AbstractMigrationService
     protected function createUpdateQuery(
         $table, array $data, $where = 1, array $vars = array()
     ) {
+        $args = compact('table', 'data', 'where', 'vars');
+        $this->emitSignal(self::CREATE_UPDATE_QUERY_SIGNAL, $args);
+
         if ($this->count) {
             $sql = "SELECT COUNT(*) FROM {$table} WHERE {$where};";
         } else {
@@ -309,12 +369,12 @@ abstract class AbstractMigrationService
             $sql = rtrim($sql, ",\n") . " \nWHERE {$where};";
         }
 
-        return $vars ? $this->quoteInto($vars, $sql) : $sql;
+        return $this->quoteInto($vars, $sql);
     }
     
     /**
      * Quote values into a statement
-     * 
+     *
      * @param array  $values    Values, where key must be the name
      * @param string $statement Statement string
      * 
@@ -322,6 +382,17 @@ abstract class AbstractMigrationService
      */
     protected function quoteInto(array $values, $statement)
     {
+        $mappedTables = array();
+        foreach (self::$mappingOverrides as $override) {
+            if (array_key_exists($override[0], $mappedTables)) {
+                continue;
+            }
+            $mappedTables[$override[0]] = 1;
+            foreach ($override[1] as $column => $value) {
+                $values['default(' . $override[0] . '.' . $column . ')'] = $value;
+            }
+        }
+
         uksort(
             $values,
             function ($a, $b) {
@@ -339,7 +410,7 @@ abstract class AbstractMigrationService
                 $value = is_int($value) ? (int) $value : (float) $value;
             } elseif ($value === null) {
                 $value = 'NULL';
-            } else {
+            } elseif (substr($key, 0, 8) !== 'default(') {
                 $value = $this->database->fullQuoteStr($value, '');
             }
             $replace[] = $value;
@@ -480,7 +551,7 @@ abstract class AbstractMigrationService
      * 
      * @return void
      */
-    protected function output($text, array $arguments = array())
+    public function output($text, array $arguments = array())
     {
         if ($arguments !== array()) {
             $text = vsprintf($text, $arguments);
@@ -500,7 +571,7 @@ abstract class AbstractMigrationService
      * 
      * @return string
      */
-    protected function outputLine($text = '', array $arguments = array())
+    public function outputLine($text = '', array $arguments = array())
     {
         return $this->output($text . PHP_EOL, $arguments);
     }
