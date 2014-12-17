@@ -30,6 +30,7 @@ if (TYPO3_MODE == 'BE') {
         array(
             'tstamp' => 'UNIX_TIMESTAMP()',
             'last_indexed' => 'UNIX_TIMESTAMP()',
+            'missing' => 'IF(tx_dam.file_status = 255, 1, 0)',
             'storage' => ':storageUid',
             'type' => 
                 'IF(tx_dam.media_type >= 0 AND '
