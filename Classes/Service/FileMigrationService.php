@@ -96,6 +96,69 @@ class FileMigrationService extends AbstractMigrationService
             'Migrating references'
         );
     }
+
+    /**
+     * Rewrite <media> tags to <link> tags
+     *
+     * @return void
+     */
+    public function migrateMediaTags()
+    {
+        $sql = 'SELECT '
+            . 'tablename, GROUP_CONCAT(DISTINCT field) fields, recuid '
+            . 'FROM sys_refindex '
+            . "WHERE ref_table = 'tx_dam' AND softref_key='mediatag' "
+            . 'GROUP BY tablename, recuid;';
+
+        if ($this->count) {
+            $sql = 'SELECT COUNT(*) FROM (' . $sql . ') tmp';
+            $this->query($sql);
+            return;
+        }
+
+        $res = $this->database->sql_query($sql);
+        $warnings = array();
+        while ($ref = $this->database->sql_fetch_assoc($res)) {
+            $where = 'uid=' . $ref['recuid'];
+            $row = $this->database->exec_SELECTgetSingleRow(
+                $ref['fields'], $ref['tablename'], $where
+            );
+            if (!$row) {
+                $warnings[] = "Missing record {$ref['tablename']}:{$ref['recuid']}";
+                continue;
+            }
+            $newRow = array();
+            foreach ($row as $field => $content) {
+                preg_match_all(
+                    '#(<|&lt;)media ([0-9]+)([^>]*)?(>|&gt;)(.*?)\1/media\4#',
+                    $content, $results, PREG_SET_ORDER
+                );
+                foreach ($results as $result) {
+                    $fileRow = $this->database->exec_SELECTgetSingleRow(
+                        'uid', 'sys_file', '_migrateddamuid=' . $result[2]
+                    );
+                    if ($fileRow) {
+                        $newRow[$field] = str_replace(
+                            $result[0],
+                            $result[1] . 'link file:' . $fileRow['uid']
+                            . $result[3] . $result[4] . $result[5]
+                            . $result[1] . '/file' . $result[4],
+                            $content
+                        );
+                    } else {
+                        $warnings[] = 'No FAL file found for dam uid: ' . $result[2];
+                    }
+                }
+            }
+            if ($newRow) {
+                $this->query(
+                    $this->createUpdateQuery($ref['tablename'], $newRow, $where),
+                    "Migrating <media> tags in {$ref['tablename']}:{$ref['recuid']}"
+                );
+            }
+        }
+        $this->outputWarnings($warnings);
+    }
     
     /**
      * Set foreign fields of 'inline' relations to 1, as TYPO3 otherwise won't show
