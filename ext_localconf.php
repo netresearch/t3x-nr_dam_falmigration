@@ -16,14 +16,21 @@ if (!defined('TYPO3_MODE')) {
 }
 
 if (TYPO3_MODE == 'BE') {
+    $ns = 'Netresearch\\NrDamFalmigration\\';
     $scOptions = &$GLOBALS['TYPO3_CONF_VARS']['SC_OPTIONS'];
     $scOptions['extbase']['commandControllers'][]
-        = 'Netresearch\\NrDamFalmigration\Controller\DamMigrationCommandController';
+        = $ns . 'Controller\\DamMigrationCommandController';
 
-    $scOptions['ext/install']['update']['tx_nrdamfalmigration_files']
-        = 'Netresearch\\NrDamFalmigration\\Updates\\MigrateDamFilesUpdate';
-    $scOptions['ext/install']['update']['tx_nrdamfalmigration_categories']
-        = 'Netresearch\\NrDamFalmigration\\Updates\\MigrateDamCategoriesUpdate';
+    // Force those installers to be first
+    $scOptions['ext/install']['update'] = array_merge(
+        array(
+            'tx_nrdamfalmigration_files'
+                => $ns . 'Updates\\MigrateDamFilesUpdate',
+            'tx_nrdamfalmigration_categories'
+                => $ns . 'Updates\\MigrateDamCategoriesUpdate'
+        ),
+        $scOptions['ext/install']['update']
+    );
 
     Netresearch\NrDamFalmigration\Service\FileMigrationService::appendMappings(
         'sys_file',
