@@ -22,6 +22,7 @@ $EM_CONF[$_EXTKEY] = array(
     'constraints' => array(
         'depends' => array(
             'typo3' => '6.2.0-0.0.0',
+            'filemetadata' => '6.2.0-0.0.0',
         ),
         'conflicts' => array(
         ),
