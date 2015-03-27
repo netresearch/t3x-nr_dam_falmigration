@@ -142,7 +142,7 @@ class FileMigrationService extends AbstractMigrationService
                             $result[0],
                             $result[1] . 'link file:' . $fileRow['uid']
                             . $result[3] . $result[4] . $result[5]
-                            . $result[1] . '/file' . $result[4],
+                            . $result[1] . '/link' . $result[4],
                             $content
                         );
                     } else {
