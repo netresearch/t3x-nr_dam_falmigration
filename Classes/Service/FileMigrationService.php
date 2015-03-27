@@ -130,7 +130,7 @@ class FileMigrationService extends AbstractMigrationService
             $newRow = array();
             foreach ($row as $field => $content) {
                 preg_match_all(
-                    '#(<|&lt;)media ([0-9]+)([^>]*)?(>|&gt;)(.*?)\1/media\4#',
+                    '#(<|&lt;)media ([0-9]+)([^>]*)?(>|&gt;)(.*)\1/media\4#U',
                     $content, $results, PREG_SET_ORDER
                 );
                 foreach ($results as $result) {
@@ -138,7 +138,7 @@ class FileMigrationService extends AbstractMigrationService
                         'uid', 'sys_file', '_migrateddamuid=' . $result[2]
                     );
                     if ($fileRow) {
-                        $newRow[$field] = str_replace(
+                        $newRow[$field] = $content = str_replace(
                             $result[0],
                             $result[1] . 'link file:' . $fileRow['uid']
                             . $result[3] . $result[4] . $result[5]
