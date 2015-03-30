@@ -130,7 +130,7 @@ class FileMigrationService extends AbstractMigrationService
             $newRow = array();
             foreach ($row as $field => $content) {
                 preg_match_all(
-                    '#(<|&lt;)media ([0-9]+)([^>]*)?(>|&gt;)(.*)\1/media\4#U',
+                    '#(<|&lt;)media ([0-9]+?)([^>]*)?(>|&gt;)(.*)\1/media\4#U',
                     $content, $results, PREG_SET_ORDER
                 );
                 foreach ($results as $result) {
