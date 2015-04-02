@@ -16,6 +16,7 @@ declare(encoding = 'UTF-8');
 
 namespace Netresearch\NrDamFalmigration\Updates;
 
+use TYPO3\CMS\Core\Messaging\FlashMessage;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Install\Updates\AbstractUpdate;
 
@@ -79,23 +80,20 @@ abstract class AbstractDamMigrationUpdate extends AbstractUpdate
         try {
             $expectedRecords = $service->run();
         } catch (\Exception $e) {
-            $message = GeneralUtility::makeInstance(
-                'TYPO3\\CMS\\Core\\Messaging\\FlashMessage',
+            $description .= $this->renderMessage(
                 'This wizard relies on the new sys_file and sys_category tables as
                 well as the tx_dam tables (tx_dam, tx_dam_mm_ref, tx_dam_cat,
                 tx_dam_mm_cat). <br/>
                 Please make sure, you ran the Database Analyzer before. <br/>
                 Error was: <br/> ' . $e->getMessage(),
-                'Error while counting the expected records',
-                \TYPO3\CMS\Core\Messaging\FlashMessage::ERROR
+                'Error while counting the expected records'
             );
-            $description .= $message->render();
             return true;
         }
 
         if (max($expectedRecords) > 0) {
             $i = 0;
-            $description .= '<br/><strong>Expected number of records to be migrated:'
+            $description .= '<strong>Expected number of records to be migrated:'
                 . '</strong>';
             foreach ($expectedRecords as $title => $count) {
                 $description .= "<br/>{$title}: <strong>{$count}</strong>";
@@ -109,6 +107,26 @@ abstract class AbstractDamMigrationUpdate extends AbstractUpdate
         }
 
         return true;
+    }
+
+    /**
+     * Render a flash message
+     *
+     * @param string      $message  Message body
+     * @param string|null $title    Title of the message
+     * @param int         $severity Severity
+     *
+     * @return string
+     */
+    protected function renderMessage(
+        $message, $title = null, $severity = FlashMessage::ERROR
+    ) {
+        return GeneralUtility::makeInstance(
+            'TYPO3\\CMS\\Core\\Messaging\\FlashMessage',
+            $message,
+            $title,
+            $severity
+        )->render();
     }
 
     /**
