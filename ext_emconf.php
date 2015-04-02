@@ -1,17 +1,18 @@
 <?php
-
-/***************************************************************
- * Extension Manager/Repository config file for ext "nr_cdn".
+/**
+ * Extension information
  *
- * Auto generated 03-07-2014 15:50
+ * PHP version 5
  *
- * Manual updates:
- * Only the data in the array - everything else is removed by next
- * writing. "version" and "dependencies" must not be touched!
- ***************************************************************/
+ * @category Netresearch
+ * @package  NR_DAM_FALMIGRATION
+ * @author   Christian Opitz <christian.opitz@netresearch.de>
+ * @license  http://www.netresearch.de Netresearch
+ * @link     http://www.netresearch.de
+ */
 
 $EM_CONF[$_EXTKEY] = array(
-    'title' => 'Netresearch DAM to FAL migration tools',
+    'title' => 'DAM to FAL migration',
     'description' => 'Tools to migrate from Digital Asset Management (DAM) to File '
     . 'Abstraction Layer (FAL)',
     'category' => 'services',
@@ -21,8 +22,7 @@ $EM_CONF[$_EXTKEY] = array(
     'shy' => '',
     'constraints' => array(
         'depends' => array(
-            'typo3' => '6.2.0-0.0.0',
-            'filemetadata' => '6.2.0-0.0.0',
+            'typo3' => '4.2.0-0.0.0',
         ),
         'conflicts' => array(
         ),

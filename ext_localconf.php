@@ -15,7 +15,12 @@ if (!defined('TYPO3_MODE')) {
     die('Access denied.');
 }
 
-if (TYPO3_MODE == 'BE') {
+if (TYPO3_MODE == 'BE'
+    && class_exists('\\TYPO3\\CMS\\Core\\Utility\\VersionNumberUtility')
+    && \TYPO3\CMS\Core\Utility\VersionNumberUtility::convertVersionNumberToInteger(
+        \TYPO3\CMS\Core\Utility\VersionNumberUtility::getNumericTypo3Version()
+    ) >= 6002000
+) {
     $ns = 'Netresearch\\NrDamFalmigration\\';
     $scOptions = &$GLOBALS['TYPO3_CONF_VARS']['SC_OPTIONS'];
     $scOptions['extbase']['commandControllers'][]

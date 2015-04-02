@@ -16,7 +16,8 @@ declare(encoding = 'UTF-8');
 
 namespace Netresearch\NrDamFalmigration\Service;
 
-use TYPO3\CMS\Core\Resource\ResourceStorage;
+use TYPO3\CMS\Core\Utility\ExtensionManagementUtility;
+use TYPO3\CMS\Core\Utility\GeneralUtility;
 
 /**
  * Service to migrate DAM files to FAL files including metadata and references
@@ -30,6 +31,31 @@ use TYPO3\CMS\Core\Resource\ResourceStorage;
  */
 class FileMigrationService extends AbstractMigrationService
 {
+    /**
+     * Override parent main method in order to install required extensions upfront
+     *
+     * @return array|void
+     */
+    public function run()
+    {
+        if (!ExtensionManagementUtility::isLoaded('filemetadata')) {
+            $this->output('Installing required extension filemetadata ');
+            if ($this->isDryrun()) {
+                $this->outputLine('skipped while dry run');
+            } else {
+                GeneralUtility::makeInstance(
+                    'TYPO3\\CMS\\Extbase\\Object\\ObjectManager'
+                )
+                    ->get('TYPO3\\CMS\\Extensionmanager\\Utility\\InstallUtility')
+                    ->install('filemetadata');
+                $this->outputLine('successful');
+            }
+        }
+
+        return parent::run();
+    }
+
+
     /**
      * Migrate all files by storage from DAM
      * 
