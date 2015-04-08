@@ -39,7 +39,7 @@ $EM_CONF[$_EXTKEY] = array(
     'modify_tables' => '',
     'clearCacheOnLoad' => 0,
     'lockType' => '',
-    'version' => '0.0.1',
+    'version' => '1.0.0',
     '_md5_values_when_last_written' => '',
     'suggests' => array(
     ),
