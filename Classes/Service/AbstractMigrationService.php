@@ -307,7 +307,16 @@ abstract class AbstractMigrationService
     protected function createInsertQuery(
         $to, $from, $where = '1', $order = null, array $vars = array()
     ) {
-        $this->emitSignal(self::CREATE_INSERT_QUERY_SIGNAL, array('vars' => &$vars));
+        $this->emitSignal(
+            self::CREATE_INSERT_QUERY_SIGNAL,
+            array(
+                'to' => $to,
+                'from' => &$from,
+                'where' => &$where,
+                'order' => &$order,
+                'vars' => &$vars,
+            )
+        );
 
         if (!array_key_exists($to, $this->mapping)) {
             throw new Exception\Error("No mapping for table {$to} found");
