@@ -137,7 +137,7 @@ class FileMigrationService extends AbstractMigrationService
             . 'GROUP BY tablename, recuid;';
 
         if ($this->count) {
-            $sql = 'SELECT COUNT(*) FROM (' . $sql . ') tmp';
+            $sql = 'SELECT COUNT(*) FROM (' . rtrim($sql, ' ;') . ') tmp';
             $this->query($sql);
             return;
         }
