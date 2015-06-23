@@ -240,6 +240,37 @@ class FileMigrationService extends AbstractMigrationService
     }
 
     /**
+     * The sys_file_reference records need the PIDs to be the same as those of
+     * the foreign records (or UID when foreign table is pages)
+     * We couldn't handle this while import and thus have to do this here.
+     *
+     * @return void
+     */
+    public function sanitizeReferencePids()
+    {
+        $refTable = 'sys_file_reference sfr';
+        $res = $this->database->exec_SELECTquery('tablenames', $refTable, '1', 'tablenames');
+        while ($row = $this->database->sql_fetch_row($res)) {
+            list($table) = $row;
+            $refWhere = 'sfr.tablenames = ' . $this->database->fullQuoteStr($table, '');
+            if ($table === 'pages') {
+                $query = $this->createUpdateQuery(
+                    $refTable,
+                    array('pid = uid_foreign'),
+                    $refWhere
+                );
+            } else {
+                $query = $this->createUpdateQuery(
+                    "$refTable, $table t",
+                    array('sfr.pid = t.pid'),
+                    $refWhere . ' AND t.uid = sfr.uid_foreign'
+                );
+            }
+            $this->query($query, 'Setting reference pids for files on ' . $table);
+        }
+    }
+
+    /**
      * Get the tables (keys) and fields (values) of the related records
      *
      * @return array
