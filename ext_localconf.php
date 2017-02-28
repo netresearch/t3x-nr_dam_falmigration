@@ -32,7 +32,9 @@ if (TYPO3_MODE == 'BE'
             'tx_nrdamfalmigration_files'
                 => $ns . 'Updates\\MigrateDamFilesUpdate',
             'tx_nrdamfalmigration_categories'
-                => $ns . 'Updates\\MigrateDamCategoriesUpdate'
+                => $ns . 'Updates\\MigrateDamCategoriesUpdate',
+            'tx_nrdamfalmigration_permissions'
+                => $ns . "Updates\\MigratePermissionsUpdate"
         ),
         $scOptions['ext/install']['update']
     );
@@ -44,17 +46,17 @@ if (TYPO3_MODE == 'BE'
             'last_indexed' => 'UNIX_TIMESTAMP()',
             'missing' => 'IF(tx_dam.file_status = 255, 1, 0)',
             'storage' => ':storageUid',
-            'type' => 
+            'type' =>
                 'IF(tx_dam.media_type >= 0 AND '
                 . 'tx_dam.media_type <= 5, tx_dam.media_type, 5)',
-            'identifier' => 
+            'identifier' =>
                 '@filepath := CONCAT(@folderpath := SUBSTRING(tx_dam.file_path, '
                 . ':baseDirLen, CHAR_LENGTH(tx_dam.file_path) - :baseDirLen), '
                 . '\'/\', tx_dam.file_name)',
             'identifier_hash' => 'SHA1(@filepath)',
             'folder_hash' => 'SHA1(@folderpath)',
             'extension' => 'tx_dam.file_type',
-            'mime_type' => 
+            'mime_type' =>
                 'CONCAT(tx_dam.file_mime_type, \'/\', tx_dam.file_mime_subtype)',
             'name' => 'tx_dam.file_name',
             'size' => 'tx_dam.file_size',
@@ -106,7 +108,7 @@ if (TYPO3_MODE == 'BE'
             'uid_local' => 'sf.uid',
             'uid_foreign' => 'mm.uid_foreign',
             'tablenames' => 'mm.tablenames',
-            'fieldname' => 
+            'fieldname' =>
             "IF("
             . "mm.tablenames = 'tt_content',"
                 . " CASE mm.ident"

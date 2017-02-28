@@ -49,7 +49,25 @@ class DamMigrationCommandController extends CommandController
     }
 
     /**
-     * Migrate tx_dam to sys_file and sys_file_metadata and 
+     * Migrates be_users und be_groups permissions from dam to fal.
+     *
+     * @param boolean $dryrun  Only show the mysql statements,
+     *                         which would be executed
+     * @param boolean $count   Only count the records, expected to be migrated
+     *
+     * @return void
+     */
+    public function migratePermissionsCommand(
+        $dryrun = false, $count = false
+    ) {
+        $service = $this->objectManager->get(
+            'Netresearch\\NrDamFalmigration\\Service\\PermissionMigrationService'
+        );
+        $this->runService($service, $dryrun, $count);
+    }
+
+    /**
+     * Migrate tx_dam to sys_file and sys_file_metadata and
      * tx_dam_mm_ref to sys_file_reference
      *
      * @param integer $storage Limit import to a storage
@@ -57,7 +75,7 @@ class DamMigrationCommandController extends CommandController
      * @param boolean $dryrun  Only show the mysql statements,
      *                         which would be executed
      * @param boolean $count   Only count the records, expected to be migrated
-     * 
+     *
      * @return void
      */
     public function migrateFilesCommand(
@@ -69,15 +87,15 @@ class DamMigrationCommandController extends CommandController
         $service->setStorageUid($storage);
         $this->runService($service, $dryrun, $count);
     }
-    
+
     /**
      * Migrate categories from tx_dam_cat to sys_category and
      * their relations from tx_dam_mm_cat to sys_category_record_mm
-     * 
+     *
      * @param boolean $dryrun Only show the mysql statements, which would be
      *                        executed
      * @param boolean $count  Only count the records, expected to be migrated
-     * 
+     *
      * @return void
      */
     public function migrateCategoriesCommand($dryrun = false, $count = false)
