@@ -162,19 +162,24 @@ class FileMigrationService extends AbstractMigrationService
                     $fileRow = $this->database->exec_SELECTgetSingleRow(
                         'uid', 'sys_file', '_migrateddamuid=' . $result[2]
                     );
+
                     if ($fileRow) {
-                        $newRow[$field] = $content = str_replace(
-                            $result[0],
-                            $result[1] . 'link file:' . $fileRow['uid']
-                            . $result[3] . $result[4] . $result[5]
-                            . $result[1] . '/link' . $result[4],
-                            $content
-                        );
+                        $fileUid = $fileRow['uid'];
                     } else {
+                        $fileUid = 0;
                         $warnings[] = 'No FAL file found for dam uid: ' . $result[2];
                     }
+
+                    $newRow[$field] = $content = str_replace(
+                        $result[0],
+                        $result[1] . 'link file:' . $fileUid
+                        . $result[3] . $result[4] . $result[5]
+                        . $result[1] . '/link' . $result[4],
+                        $content
+                    );
                 }
             }
+
             if ($newRow) {
                 $this->query(
                     $this->createUpdateQuery($ref['tablename'], $newRow, $where),
